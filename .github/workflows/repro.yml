@@ -1,0 +1,60 @@
+name: aarch64 GOTPCREL32 repro
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: rust ${{ matrix.toolchain }} (expect ${{ matrix.expect }})
+    # Native aarch64 Linux runner; links with the distro's GNU ld (binutils 2.42).
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: 1.88.0
+            expect: fail
+          - toolchain: 1.90.0
+            expect: pass
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Toolchain info
+        run: |
+          rustc -vV
+          ld --version | head -1
+
+      - name: Build
+        id: build
+        run: |
+          set +e
+          cargo build --locked -v 2>&1 | tee build.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect rustls rlib
+        run: |
+          grep -oE -- '--crate-name rustls .*-C opt-level=[0-9]+' build.log | grep -oE -- '-C opt-level=[0-9]+' || echo "rustls built WITHOUT -C opt-level"
+          n=$(readelf -rW target/debug/deps/librustls-*.rlib 2>/dev/null | grep -c GOTPCREL32 || true)
+          echo "R_AARCH64_GOTPCREL32 relocations in librustls: $n"
+          grep -E 'unrecognized relocation|final link failed' build.log || true
+
+      - name: Check outcome matches expectation
+        env:
+          STATUS: ${{ steps.build.outputs.status }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          if [ "$EXPECT" = fail ] && [ "$STATUS" != 0 ]; then
+            echo "Build failed as expected (the bug reproduces)."
+          elif [ "$EXPECT" = pass ] && [ "$STATUS" = 0 ]; then
+            echo "Build passed as expected."
+          else
+            echo "::error::Expected build to $EXPECT, but cargo exited with $STATUS"
+            exit 1
+          fi

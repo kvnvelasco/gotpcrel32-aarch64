@@ -1,0 +1,11 @@
+[package]
+name = "rustls-188-linker-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rustls = { version = "=0.23.45", default-features = false, features = ["aws_lc_rs", "std"] }
+
+[profile.dev]
+opt-level = 1
+strip = "debuginfo"
