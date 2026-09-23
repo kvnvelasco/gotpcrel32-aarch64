@@ -16,7 +16,7 @@ jobs:
         include:
           - toolchain: 1.88.0
             expect: fail
-          - toolchain: 1.98.1
+          - toolchain: 1.90.0
             expect: pass
 
     steps:
